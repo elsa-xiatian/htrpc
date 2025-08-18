@@ -1,4 +1,4 @@
-package org.example.impl;
+package com.htrpc.impl;
 
 import com.htrpc.HelloHtrpc;
 
