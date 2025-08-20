@@ -1,5 +1,6 @@
 package com.htrpc;
 
+import com.htrpc.discovery.RegistryConfig;
 import com.htrpc.impl.Hellorpcimpl;
 
 public class Application {

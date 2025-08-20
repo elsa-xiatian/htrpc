@@ -1,11 +1,15 @@
 package com.htrpc;
 
+import com.htrpc.discovery.RegistryConfig;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class application {
     public static void main(String[] args) {
         //使用ReferenceConfig进行封装
         //reference中存在生成代理的模板方法
 
-        ReferenceConfig<HelloHtrpc> reference = new ReferenceConfig<>();
+        ReferenceConfig<HelloHtrpc> reference = new ReferenceConfig<>(); //服务引用配置类，用来描述调用哪个接口的服务
         reference.setInterface(HelloHtrpc.class);
 
         //代理作用：
@@ -16,11 +20,12 @@ public class application {
         // 5.获得结果
         htrpcBootstrap.getInstance()
                 .application("first-htrpc-consumer")
-                .registry(new RegistryConfig("zookeeper:127.0.0.1:2181"))
+                .registry(new RegistryConfig("zookeeper://127.0.0.1:2181"))
                 .reference(reference);
 
         //获取代理对象
         HelloHtrpc htrpc = reference.get();
-        htrpc.sayHi("你好");
+        String sayHi = htrpc.sayHi("你好");
+        log.info("sayhi -->{}",sayHi);
     }
 }

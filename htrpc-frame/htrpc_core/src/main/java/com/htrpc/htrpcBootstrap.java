@@ -1,15 +1,53 @@
 package com.htrpc;
 
+import com.htrpc.channelHandler.handler.MethodCallHandler;
+import com.htrpc.channelHandler.handler.htrpcMessageDecoder;
+import com.htrpc.discovery.Registry;
+import com.htrpc.discovery.RegistryConfig;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.logging.LoggingHandler;
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
+import java.util.HashMap;
 import java.util.List;
-import java.util.logging.Handler;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class htrpcBootstrap {
 
     //htrpcBootstrap是一个单例：即只有一个实例
-    private static htrpcBootstrap htrpcstrap = new htrpcBootstrap();
+    private static final htrpcBootstrap htrpcstrap = new htrpcBootstrap();
+
+    //定义相关基础配置
+    private String appName = "default"; //应用名称
+
+    private RegistryConfig registryConfig;
+    private ProtocalConfig protocalConfig;
+    private int port = 8088;
+    //TODO 待处理
+    private Registry registry;
+    //连接的缓存
+    public final static Map<InetSocketAddress, Channel> CHANNEL_CACHE = new ConcurrentHashMap<>(16);
+
+    //维护已经发布并暴露的服务列表，key是接口的全限定名，value是服务的配置
+    public final static Map<String,ServiceConfig<?>> SERVERS_LIST = new ConcurrentHashMap<>(16);
+
+    //定义全局的对外挂起的completableFuture
+    public final static Map<Long, CompletableFuture<Object>> PENDING_REQUEST = new ConcurrentHashMap<>(128);
+
+    //维护一个zookeeper实例
+    // private ZooKeeper zooKeeper;
+
 
     private htrpcBootstrap(){
         //构造启动引导程序，在此做初始化
@@ -24,6 +62,7 @@ public class htrpcBootstrap {
      * @return this
      */
     public htrpcBootstrap application(String appName) {
+        this.appName = appName;
         return this;
     }
 
@@ -32,6 +71,8 @@ public class htrpcBootstrap {
      * @return this 当前实例
      */
     public htrpcBootstrap registry(RegistryConfig registryConfig) {
+        //尝试使用 registryConfig获取一个注册中心
+        this.registry = registryConfig.getRegistry();
         return this;
     }
 
@@ -41,6 +82,7 @@ public class htrpcBootstrap {
      * @return
      */
     public htrpcBootstrap protocal(ProtocalConfig protocalConfig) {
+        this.protocalConfig = protocalConfig;
         if(log.isDebugEnabled()){
             log.debug("当前工程使用了: {}协议进行序列化",protocalConfig.toString());
         }
@@ -53,11 +95,10 @@ public class htrpcBootstrap {
      * @return
      */
     public htrpcBootstrap publish(ServiceConfig<?> service) {
-        if(log.isDebugEnabled()){
-            log.debug("服务{},已经被注册",service.getInterface().getName());
-        }
+        //抽象了注册中心的概念，使用注册中心的一个实现完成注册
+        registry.register(service);
+        SERVERS_LIST.put(service.getInterface().getName(),service);
         return this;
-
     }
 
     /**
@@ -66,7 +107,10 @@ public class htrpcBootstrap {
      * @return
      */
 
-    public htrpcBootstrap publish(List<?> services) {
+    public htrpcBootstrap publish(List<ServiceConfig<?>> services) {
+        for (ServiceConfig<?> service : services) {
+            this.publish(service);
+        }
         return this;
     }
 
@@ -74,6 +118,40 @@ public class htrpcBootstrap {
      * 启动netty服务
      */
     public void start() {
+        EventLoopGroup boss = new NioEventLoopGroup(2);
+        EventLoopGroup worker = new NioEventLoopGroup(10);
+        try {
+
+            //2.需要一个服务器引导程序
+            ServerBootstrap serverBootstrap = new ServerBootstrap();
+
+            serverBootstrap.group(boss, worker)
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel socketChannel) throws Exception {
+                            //核心部分，需要添加很多入站和出战的handler
+                            socketChannel.pipeline().addLast(new LoggingHandler())
+                                    .addLast(new htrpcMessageDecoder())
+                                    .addLast(new MethodCallHandler());
+                        }
+                    });
+
+            //4.绑定端口
+
+            ChannelFuture channelFuture = serverBootstrap.bind(port).sync();
+
+            channelFuture.channel().closeFuture().sync();
+        }catch (InterruptedException e){
+
+        }finally {
+            try {
+                boss.shutdownGracefully().sync();
+                worker.shutdownGracefully().sync();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     /**
@@ -84,6 +162,7 @@ public class htrpcBootstrap {
 
     public htrpcBootstrap reference(ReferenceConfig<?> reference) {
         //配置reference，方便生成代理对象
+        reference.setRegistry(registry);
         return this;
      }
 }
