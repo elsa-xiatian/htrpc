@@ -1,12 +1,11 @@
 package com.htrpc;
 
 import com.htrpc.channelHandler.handler.MethodCallHandler;
-import com.htrpc.channelHandler.handler.htrpcMessageDecoder;
+import com.htrpc.channelHandler.handler.htrpcRequestDecoder;
+import com.htrpc.channelHandler.handler.htrpcResponseEncoder;
 import com.htrpc.discovery.Registry;
 import com.htrpc.discovery.RegistryConfig;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -15,8 +14,6 @@ import io.netty.handler.logging.LoggingHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -34,6 +31,9 @@ public class htrpcBootstrap {
     private RegistryConfig registryConfig;
     private ProtocalConfig protocalConfig;
     private int port = 8088;
+
+    public static final IdGenerator ID_GENERATOR = new IdGenerator(1,2);
+    public static String SERIALIZE_TYPE = "jdk";
     //TODO 待处理
     private Registry registry;
     //连接的缓存
@@ -132,8 +132,10 @@ public class htrpcBootstrap {
                         protected void initChannel(SocketChannel socketChannel) throws Exception {
                             //核心部分，需要添加很多入站和出战的handler
                             socketChannel.pipeline().addLast(new LoggingHandler())
-                                    .addLast(new htrpcMessageDecoder())
-                                    .addLast(new MethodCallHandler());
+                                    .addLast(new htrpcRequestDecoder())
+                                    .addLast(new MethodCallHandler())
+                                    .addLast(new htrpcResponseEncoder())
+                                    ;
                         }
                     });
 
@@ -165,4 +167,15 @@ public class htrpcBootstrap {
         reference.setRegistry(registry);
         return this;
      }
+
+    /**
+     * 配置序列化的方式
+     * @param serializeType
+     */
+    public htrpcBootstrap serialize(String serializeType) {
+        SERIALIZE_TYPE = serializeType;
+        if(log.isDebugEnabled()){}
+        log.debug("配置了使用的序列化的方式为：[{}]",serializeType);
+        return this;
+    }
 }

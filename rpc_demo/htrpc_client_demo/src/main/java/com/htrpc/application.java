@@ -21,6 +21,7 @@ public class application {
         htrpcBootstrap.getInstance()
                 .application("first-htrpc-consumer")
                 .registry(new RegistryConfig("zookeeper://127.0.0.1:2181"))
+                .serialize("jdk")
                 .reference(reference);
 
         //获取代理对象

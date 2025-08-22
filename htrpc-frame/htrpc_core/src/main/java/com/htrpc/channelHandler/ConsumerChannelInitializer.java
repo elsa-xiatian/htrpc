@@ -1,7 +1,8 @@
 package com.htrpc.channelHandler;
 
 import com.htrpc.channelHandler.handler.MysimpleChannelInboundHandler;
-import com.htrpc.channelHandler.handler.htrpcMessageEncoder;
+import com.htrpc.channelHandler.handler.htrpcRequestEncoder;
+import com.htrpc.channelHandler.handler.htrpcResponseDecoder;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
@@ -14,8 +15,10 @@ public class ConsumerChannelInitializer extends ChannelInitializer<SocketChannel
                 //netty自带日志处理器
                 .addLast(new LoggingHandler(LogLevel.DEBUG))
                 //消息编码器
-                .addLast(new htrpcMessageEncoder())
-
+                .addLast(new htrpcRequestEncoder())
+                //入站解码器
+                .addLast(new htrpcResponseDecoder())
+                // 处理结果
                 .addLast(new MysimpleChannelInboundHandler());
     }
 }

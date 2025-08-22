@@ -1,9 +1,12 @@
 package com.htrpc.channelHandler.handler;
 
 import com.htrpc.enumeration.RequestType;
+import com.htrpc.serialize.Serializer;
+import com.htrpc.serialize.SerializerFactory;
 import com.htrpc.transport.message.MessageFormatConstant;
 import com.htrpc.transport.message.RequestPayLoad;
 import com.htrpc.transport.message.htrpcRequest;
+import com.htrpc.transport.message.htrpcResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
@@ -14,8 +17,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 
 @Slf4j
-public class htrpcMessageDecoder extends LengthFieldBasedFrameDecoder {
-    public htrpcMessageDecoder() {
+public class htrpcResponseDecoder extends LengthFieldBasedFrameDecoder {
+    public htrpcResponseDecoder() {
         super(
                 //最大帧长度
                 MessageFormatConstant.MAX_FRAME_LENGTH
@@ -25,10 +28,8 @@ public class htrpcMessageDecoder extends LengthFieldBasedFrameDecoder {
                         MessageFormatConstant.HEADER_FIELD_LENGTH
                 //长度的字段的长度
                 , MessageFormatConstant.FULL_FIELD_LENGTH
-                , MessageFormatConstant.MAGIC.length +
-                        MessageFormatConstant.VERSION_LENGTH +
-                        MessageFormatConstant.HEADER_FIELD_LENGTH +
-                        MessageFormatConstant.FULL_FIELD_LENGTH
+                , -(MessageFormatConstant.MAGIC.length + MessageFormatConstant.VERSION_LENGTH
+                +MessageFormatConstant.HEADER_FIELD_LENGTH + MessageFormatConstant.FULL_FIELD_LENGTH)
                 ,0);
     }
 
@@ -65,7 +66,7 @@ public class htrpcMessageDecoder extends LengthFieldBasedFrameDecoder {
         int fullLength = byteBuf.readInt();
 
         //请求类型
-        byte requestType = byteBuf.readByte();
+        byte responseCode = byteBuf.readByte();
 
         //序列化类型
         byte serializeType = byteBuf.readByte();
@@ -76,34 +77,34 @@ public class htrpcMessageDecoder extends LengthFieldBasedFrameDecoder {
         //请求id
         long reqauestId = byteBuf.readLong();
 
-        htrpcRequest htrpcrequest = new htrpcRequest();
-        htrpcrequest.setRequestType(requestType);
-        htrpcrequest.setCompressType(compressType);
-        htrpcrequest.setSerializeType(serializeType);
+        htrpcResponse htrpcResponse = new htrpcResponse();
+        htrpcResponse.setCode(responseCode);
+        htrpcResponse.setCompressType(compressType);
+        htrpcResponse.setSerializeType(serializeType);
+        htrpcResponse.setRequestId(reqauestId);
 
-        // 心跳请求没有负载，此处可判断并直接返回
-        if(requestType == RequestType.HEART_BEAT.getId()){
-            return htrpcrequest;
-        }
+        // todo 心跳请求没有负载，此处可判断并直接返回
+//        if(requestType == RequestType.HEART_BEAT.getId()){
+//            return htrpcrequest;
+//        }
 
 
-        int payLoadLength = fullLength - headdLength;
+        int bodyLength = fullLength - headdLength;
 
-        byte[] payLoad = new byte[payLoadLength];
+        byte[] payLoad = new byte[bodyLength];
         byteBuf.readBytes(payLoad);
 
         //得到字节数组后就可以解压缩反序列化
         //todo 解压缩
 
         //反序列化
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(payLoad);
-             ObjectInputStream ois = new ObjectInputStream(bis);
-             ){
-            RequestPayLoad requestPayLoad = (RequestPayLoad) ois.readObject();
-            htrpcrequest.setRequestPayLoad(requestPayLoad);
-        } catch (IOException | ClassNotFoundException e){
-            log.error("请求【{}】反序列化时出现异常",reqauestId,e);
+        Serializer serializer = SerializerFactory.getSerializer(htrpcResponse.getSerializeType()).getSerializer();
+        Object body = serializer.diserialize(payLoad, Object.class);
+        htrpcResponse.setBody(body);
+
+        if(log.isDebugEnabled()){
+            log.debug("响应【{}】已经在调用端完成解码工作",htrpcResponse.getRequestId());
         }
-        return htrpcrequest;
+        return htrpcResponse;
     }
 }

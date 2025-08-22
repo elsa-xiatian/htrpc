@@ -1,9 +1,11 @@
 package com.htrpc.channelHandler.handler;
 
 import com.htrpc.ServiceConfig;
+import com.htrpc.enumeration.RespCode;
 import com.htrpc.htrpcBootstrap;
 import com.htrpc.transport.message.RequestPayLoad;
 import com.htrpc.transport.message.htrpcRequest;
+import com.htrpc.transport.message.htrpcResponse;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +20,21 @@ public class MethodCallHandler extends SimpleChannelInboundHandler<htrpcRequest>
         //1.获取负载内容
         RequestPayLoad requestPayLoad = msg.getRequestPayLoad();
         //2.根据负载内容进行方法调用
-        Object object = callTargrtMethod(requestPayLoad);
-        //3.todo 封装响应
+        Object res = callTargrtMethod(requestPayLoad);
+        if(log.isDebugEnabled()){
+            log.debug("请求【{}】已经在服务端完成方法调用",msg.getRequestId());
+        }
+        //3. 封装响应
+
+        htrpcResponse htrpcresponse = new htrpcResponse();
+        htrpcresponse.setCode(RespCode.SUCCESS.getCode());
+        htrpcresponse.setRequestId(msg.getRequestId());
+        htrpcresponse.setCompressType(msg.getCompressType());
+        htrpcresponse.setSerializeType(msg.getSerializeType());
+        htrpcresponse.setBody(res);
 
         //4.写出响应
-        ctx.channel().writeAndFlush(object);
+        ctx.channel().writeAndFlush(htrpcresponse);
     }
 
     private Object callTargrtMethod(RequestPayLoad requestPayLoad) {
@@ -46,6 +58,6 @@ public class MethodCallHandler extends SimpleChannelInboundHandler<htrpcRequest>
             throw new RuntimeException(e);
         }
 
-        return null;
+        return returnValue;
     }
 }

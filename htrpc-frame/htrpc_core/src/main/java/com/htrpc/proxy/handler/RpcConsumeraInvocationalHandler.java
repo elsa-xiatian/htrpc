@@ -1,11 +1,13 @@
 package com.htrpc.proxy.handler;
 
+import com.htrpc.IdGenerator;
 import com.htrpc.NettyBootstrapInitilizer;
 import com.htrpc.discovery.Registry;
 import com.htrpc.enumeration.RequestType;
 import com.htrpc.execptions.DiscoveryException;
 import com.htrpc.execptions.NetworkException;
 import com.htrpc.htrpcBootstrap;
+import com.htrpc.serialize.SerializerFactory;
 import com.htrpc.transport.message.RequestPayLoad;
 import com.htrpc.transport.message.htrpcRequest;
 import io.netty.buffer.Unpooled;
@@ -68,8 +70,8 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
 
         //todo 需要对各种请求id及类型做处理
         htrpcRequest htrpcrequest = htrpcRequest.builder()
-                .requestId(1L)
-                .compressType((byte) 1)
+                .requestId(htrpcBootstrap.ID_GENERATOR.getId())
+                .compressType(SerializerFactory.getSerializer(htrpcBootstrap.SERIALIZE_TYPE).getCode())
                 .requestType(RequestType.REQUEST.getId())
                 .serializeType((byte) 1)
                 .requestPayLoad(requestPayLoad)
@@ -79,7 +81,7 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
         //写出报文
         CompletableFuture<Object> completableFuture = new CompletableFuture<>();
         // 需要将completabaFuture暴露出去
-        htrpcBootstrap.PENDING_REQUEST.put(1l,completableFuture);
+        htrpcBootstrap.PENDING_REQUEST.put(1L,completableFuture);
 
         //将请求写出
         channel.writeAndFlush(htrpcrequest).addListener((ChannelFutureListener) promise -> {
