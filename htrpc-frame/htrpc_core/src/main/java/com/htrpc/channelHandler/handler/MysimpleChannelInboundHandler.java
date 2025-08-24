@@ -18,12 +18,16 @@ import java.util.concurrent.CompletableFuture;
 public class MysimpleChannelInboundHandler extends SimpleChannelInboundHandler<htrpcResponse> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, htrpcResponse msg) throws Exception {
-        Object returnValue = msg.getBody();
-        CompletableFuture<Object> completableFuture = htrpcBootstrap.PENDING_REQUEST.get(1l);
-        completableFuture.complete(returnValue);
 
-        if(log.isDebugEnabled()){
-            log.debug("已经寻找到编号为【{}】的completableFuture，处理结果",msg.getRequestId());
-        }
+            Object returnValue = msg.getBody();
+
+            returnValue = returnValue == null ? new Object() : returnValue;
+            CompletableFuture<Object> completableFuture = htrpcBootstrap.PENDING_REQUEST.get(msg.getRequestId());
+            completableFuture.complete(returnValue);
+
+            if (log.isDebugEnabled()) {
+                log.debug("已经寻找到编号为【{}】的completableFuture，处理结果", msg.getRequestId());
+            }
+
     }
 }

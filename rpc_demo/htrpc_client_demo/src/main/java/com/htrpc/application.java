@@ -1,7 +1,10 @@
 package com.htrpc;
 
+import com.htrpc.core.HeartbeatDetector;
 import com.htrpc.discovery.RegistryConfig;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Map;
 
 @Slf4j
 public class application {
@@ -22,11 +25,15 @@ public class application {
                 .application("first-htrpc-consumer")
                 .registry(new RegistryConfig("zookeeper://127.0.0.1:2181"))
                 .serialize("jdk")
-                .reference(reference);
+                .reference(reference)
+                .compress("gzip");
 
         //获取代理对象
         HelloHtrpc htrpc = reference.get();
-        String sayHi = htrpc.sayHi("你好");
-        log.info("sayhi -->{}",sayHi);
+        for (int i = 0; i < 10; i++) {
+            String sayHi = htrpc.sayHi("你好");
+            log.info("sayhi -->{}",sayHi);
+        }
+
     }
 }

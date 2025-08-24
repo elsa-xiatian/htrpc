@@ -2,9 +2,11 @@ package com.htrpc.serialize;
 
 import com.htrpc.serialize.impl.JdkSerializer;
 import com.htrpc.serialize.impl.JsonSerializer;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 public class SerializerFactory {
 
     private final static ConcurrentHashMap<String,SerializerWrapper> SERIALIZER_CACHE = new ConcurrentHashMap<>(8);
@@ -26,10 +28,20 @@ public class SerializerFactory {
      * @return 包装类
      */
     public static SerializerWrapper getSerializer(String serializeType){
-        return SERIALIZER_CACHE.get(serializeType);
+        SerializerWrapper serializerWrapper = SERIALIZER_CACHE.get(serializeType);
+        if(serializerWrapper == null){
+            log.error("未找到您定义的序列化方式");
+            return SERIALIZER_CACHE_CODE.get("jdk");
+        }
+        return serializerWrapper;
     }
 
     public static SerializerWrapper getSerializer(byte serializeCode){
-        return SERIALIZER_CACHE_CODE.get(serializeCode);
+        SerializerWrapper serializerWrapper = SERIALIZER_CACHE_CODE.get(serializeCode);
+        if(serializerWrapper == null){
+            log.error("未找到您定义的序列化方式");
+            return SERIALIZER_CACHE_CODE.get("jdk");
+        }
+        return serializerWrapper;
     }
 }

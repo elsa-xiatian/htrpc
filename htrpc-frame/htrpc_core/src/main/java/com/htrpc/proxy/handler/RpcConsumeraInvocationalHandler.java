@@ -2,6 +2,7 @@ package com.htrpc.proxy.handler;
 
 import com.htrpc.IdGenerator;
 import com.htrpc.NettyBootstrapInitilizer;
+import com.htrpc.compress.CompressorFactory;
 import com.htrpc.discovery.Registry;
 import com.htrpc.enumeration.RequestType;
 import com.htrpc.execptions.DiscoveryException;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
+import java.util.Date;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -42,23 +44,6 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
     }
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        System.out.println("hello proxy");
-        //1.发现服务：从注册中心中寻找一个可用的服务
-        //传入服务的名字，返回ip+端口
-        //todo 每次调用相关方法时都需要去注册中心拉取相关服务列表吗？ 如何合理选择一个可用的服务？而不是只获取第一个？
-        InetSocketAddress address = registry.lookup(interfaceRef.getName());
-        if(log.isDebugEnabled()){
-            log.debug("服务调用方，发现了服务【{}】的可用主机【{}】",interfaceRef.getName()
-                    ,address);
-        }
-        //尝试获取通道
-        Channel channel = getAvailableChannel(address);
-        if(log.isDebugEnabled()){
-            log.debug("获取和【{}】建立的通道",address);
-        }
-
-        //封装报文
-
         RequestPayLoad requestPayLoad = RequestPayLoad.builder()
                 .interfaceName(interfaceRef.getName())
                 .methodName(method.getName())
@@ -71,17 +56,36 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
         //todo 需要对各种请求id及类型做处理
         htrpcRequest htrpcrequest = htrpcRequest.builder()
                 .requestId(htrpcBootstrap.ID_GENERATOR.getId())
-                .compressType(SerializerFactory.getSerializer(htrpcBootstrap.SERIALIZE_TYPE).getCode())
+                .compressType(CompressorFactory.getCompressor(htrpcBootstrap.COMPRESS_TYPE).getCode())
                 .requestType(RequestType.REQUEST.getId())
-                .serializeType((byte) 1)
+                .serializeType(SerializerFactory.getSerializer(htrpcBootstrap.SERIALIZE_TYPE).getCode())
+                .timeStamp(new Date().getTime())
                 .requestPayLoad(requestPayLoad)
                 .build();
+
+        htrpcBootstrap.REQUEST_THREAD_LOCAL.set(htrpcrequest);
+
+        //获取当前配置的负载均衡器，获取一个可用节点
+        InetSocketAddress address = htrpcBootstrap.LOAD_BALANCER.selectServiceAddress(interfaceRef.getName());
+        if(log.isDebugEnabled()){
+            log.debug("服务调用方，发现了服务【{}】的可用主机【{}】",interfaceRef.getName()
+                    ,address);
+        }
+        //尝试获取通道
+        Channel channel = getAvailableChannel(address);
+        if(log.isDebugEnabled()){
+            log.debug("获取和【{}】建立的通道",address);
+        }
+
+        //封装报文
+
+
 
 
         //写出报文
         CompletableFuture<Object> completableFuture = new CompletableFuture<>();
         // 需要将completabaFuture暴露出去
-        htrpcBootstrap.PENDING_REQUEST.put(1L,completableFuture);
+        htrpcBootstrap.PENDING_REQUEST.put(htrpcrequest.getRequestId(),completableFuture);
 
         //将请求写出
         channel.writeAndFlush(htrpcrequest).addListener((ChannelFutureListener) promise -> {
@@ -89,6 +93,8 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
                 completableFuture.completeExceptionally(promise.cause());
             }
         });
+        //清理threadLocal
+        htrpcBootstrap.REQUEST_THREAD_LOCAL.remove();
 
         //获得结果
         return completableFuture.get(10,TimeUnit.SECONDS);

@@ -3,8 +3,13 @@ package com.htrpc;
 import com.htrpc.channelHandler.handler.MethodCallHandler;
 import com.htrpc.channelHandler.handler.htrpcRequestDecoder;
 import com.htrpc.channelHandler.handler.htrpcResponseEncoder;
+import com.htrpc.core.HeartbeatDetector;
 import com.htrpc.discovery.Registry;
 import com.htrpc.discovery.RegistryConfig;
+import com.htrpc.loadbalancer.LoadBalancer;
+import com.htrpc.loadbalancer.impl.ConsisentHashBalancer;
+import com.htrpc.loadbalancer.impl.RoundRobinLoadBalancer;
+import com.htrpc.transport.message.htrpcRequest;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -16,12 +21,15 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class htrpcBootstrap {
 
+
+    public static final int PORT = 8090;
     //htrpcBootstrap是一个单例：即只有一个实例
     private static final htrpcBootstrap htrpcstrap = new htrpcBootstrap();
 
@@ -30,14 +38,19 @@ public class htrpcBootstrap {
 
     private RegistryConfig registryConfig;
     private ProtocalConfig protocalConfig;
-    private int port = 8088;
+
 
     public static final IdGenerator ID_GENERATOR = new IdGenerator(1,2);
     public static String SERIALIZE_TYPE = "jdk";
+    public static String COMPRESS_TYPE = "gzip";
     //TODO 待处理
+
+    public static final ThreadLocal<htrpcRequest> REQUEST_THREAD_LOCAL = new ThreadLocal<>();
     private Registry registry;
+    public static LoadBalancer LOAD_BALANCER;
     //连接的缓存
     public final static Map<InetSocketAddress, Channel> CHANNEL_CACHE = new ConcurrentHashMap<>(16);
+    public final static TreeMap<Long,Channel> ANSWER_TIME_CHANNEL_CACHE = new TreeMap<>();
 
     //维护已经发布并暴露的服务列表，key是接口的全限定名，value是服务的配置
     public final static Map<String,ServiceConfig<?>> SERVERS_LIST = new ConcurrentHashMap<>(16);
@@ -73,6 +86,7 @@ public class htrpcBootstrap {
     public htrpcBootstrap registry(RegistryConfig registryConfig) {
         //尝试使用 registryConfig获取一个注册中心
         this.registry = registryConfig.getRegistry();
+        htrpcBootstrap.LOAD_BALANCER = new ConsisentHashBalancer();
         return this;
     }
 
@@ -141,7 +155,7 @@ public class htrpcBootstrap {
 
             //4.绑定端口
 
-            ChannelFuture channelFuture = serverBootstrap.bind(port).sync();
+            ChannelFuture channelFuture = serverBootstrap.bind(PORT).sync();
 
             channelFuture.channel().closeFuture().sync();
         }catch (InterruptedException e){
@@ -163,6 +177,8 @@ public class htrpcBootstrap {
      */
 
     public htrpcBootstrap reference(ReferenceConfig<?> reference) {
+
+        HeartbeatDetector.detectHeartbeat(reference.getInterface().getName());
         //配置reference，方便生成代理对象
         reference.setRegistry(registry);
         return this;
@@ -177,5 +193,17 @@ public class htrpcBootstrap {
         if(log.isDebugEnabled()){}
         log.debug("配置了使用的序列化的方式为：[{}]",serializeType);
         return this;
+    }
+
+    public htrpcBootstrap compress(String compressType){
+        COMPRESS_TYPE = compressType;
+        if(log.isDebugEnabled()){
+            log.debug("配置了使用【{}】的压缩方式",compressType);
+        }
+        return this;
+    }
+
+    public Registry getRegistry() {
+        return registry;
     }
 }

@@ -5,6 +5,7 @@ import com.htrpc.ServiceConfig;
 import com.htrpc.discovery.AbstractRegistry;
 import com.htrpc.execptions.DiscoveryException;
 import com.htrpc.execptions.NetworkException;
+import com.htrpc.htrpcBootstrap;
 import com.htrpc.utils.zookeeper.Netutils;
 import com.htrpc.utils.zookeeper.ZookeeperNode;
 import com.htrpc.utils.zookeeper.ZookeeperUtil;
@@ -44,7 +45,7 @@ public class ZookeeperRegistry extends AbstractRegistry {
         //ip需要一个局域网ip，不是本机ip
 
         //TODO 端口后续要处理
-        String node = parentNode + "/" + Netutils.getIp() + ":" + 8088;
+        String node = parentNode + "/" + Netutils.getIp() + ":" + htrpcBootstrap.PORT;
         if(!ZookeeperUtil.exists(zooKeeper,node,null)){
             ZookeeperNode znode = new ZookeeperNode(node,null);
             ZookeeperUtil.createNode(zooKeeper,znode,null, CreateMode.EPHEMERAL);
@@ -56,7 +57,7 @@ public class ZookeeperRegistry extends AbstractRegistry {
     }
 
     @Override
-    public InetSocketAddress lookup(String serviceName) {
+    public List<InetSocketAddress> lookup(String serviceName) {
         //1.找到服务对应的节点
         String serviceNode = Constant.BASE_PROVIDERS_PATH + "/" + serviceName;
         //2.从zk中获取他的子节点
@@ -72,7 +73,6 @@ public class ZookeeperRegistry extends AbstractRegistry {
         if(inetSocketAddresses.size() == 0){
             throw new DiscoveryException("未发现任何可用的服务主机");
         }
-
-        return inetSocketAddresses.get(0);
+        return inetSocketAddresses;
     }
 }

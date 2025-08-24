@@ -1,6 +1,7 @@
 package com.htrpc.channelHandler.handler;
 
 import com.htrpc.ServiceConfig;
+import com.htrpc.enumeration.RequestType;
 import com.htrpc.enumeration.RespCode;
 import com.htrpc.htrpcBootstrap;
 import com.htrpc.transport.message.RequestPayLoad;
@@ -20,9 +21,12 @@ public class MethodCallHandler extends SimpleChannelInboundHandler<htrpcRequest>
         //1.获取负载内容
         RequestPayLoad requestPayLoad = msg.getRequestPayLoad();
         //2.根据负载内容进行方法调用
-        Object res = callTargrtMethod(requestPayLoad);
-        if(log.isDebugEnabled()){
-            log.debug("请求【{}】已经在服务端完成方法调用",msg.getRequestId());
+        Object res = null;
+        if(msg.getRequestType() != RequestType.HEART_BEAT.getId()) {
+            res = callTargrtMethod(requestPayLoad);
+            if (log.isDebugEnabled()) {
+                log.debug("请求【{}】已经在服务端完成方法调用", msg.getRequestId());
+            }
         }
         //3. 封装响应
 

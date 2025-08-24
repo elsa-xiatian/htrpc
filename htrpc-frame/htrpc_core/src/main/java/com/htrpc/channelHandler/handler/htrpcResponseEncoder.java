@@ -1,5 +1,7 @@
 package com.htrpc.channelHandler.handler;
 
+import com.htrpc.compress.Compressor;
+import com.htrpc.compress.CompressorFactory;
 import com.htrpc.serialize.Serializer;
 import com.htrpc.serialize.SerializerFactory;
 import com.htrpc.transport.message.MessageFormatConstant;
@@ -34,6 +36,7 @@ public class htrpcResponseEncoder extends MessageToByteEncoder<htrpcResponse> {
         out.writeByte(msg.getCompressType());
         //8字节的id
         out.writeLong(msg.getRequestId());
+        out.writeLong(msg.getTimeStamp());
 
 //        if(msg.getRequestType() == RequestType.HEART_BEAT.getId()){
 //            int writerIndex = out.writerIndex();
@@ -45,10 +48,17 @@ public class htrpcResponseEncoder extends MessageToByteEncoder<htrpcResponse> {
 //            return;
 //        }
         //写入请求体
-        Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getSerializer();
-        byte[] body = serializer.serialize(msg.getBody());
+        byte[] body = null;
+        if(msg.getBody() != null) {
+            Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getSerializer();
+            body = serializer.serialize(msg.getBody());
 
-        //todo 要做压缩
+            Compressor compressor = CompressorFactory.getCompressor(msg.getCompressType()).getCompressor();
+
+            body = compressor.compress(body);
+        }
+
+        //
         if(body != null) {
             out.writeBytes(body);
         }

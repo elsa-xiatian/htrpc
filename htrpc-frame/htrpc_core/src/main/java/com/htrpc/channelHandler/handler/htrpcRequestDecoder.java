@@ -1,5 +1,7 @@
 package com.htrpc.channelHandler.handler;
 
+import com.htrpc.compress.Compressor;
+import com.htrpc.compress.CompressorFactory;
 import com.htrpc.enumeration.RequestType;
 import com.htrpc.serialize.Serializer;
 import com.htrpc.serialize.SerializerFactory;
@@ -15,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.util.Random;
 
 @Slf4j
 public class htrpcRequestDecoder extends LengthFieldBasedFrameDecoder {
@@ -35,6 +38,7 @@ public class htrpcRequestDecoder extends LengthFieldBasedFrameDecoder {
 
     @Override
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        Thread.sleep(new Random().nextInt(50));
         Object decode = super.decode(ctx, in);
 
         if(decode instanceof ByteBuf byteBuf){
@@ -77,11 +81,14 @@ public class htrpcRequestDecoder extends LengthFieldBasedFrameDecoder {
         //请求id
         long reqauestId = byteBuf.readLong();
 
+        long timeStamp = byteBuf.readLong();
+
         htrpcRequest htrpcrequest = new htrpcRequest();
         htrpcrequest.setRequestType(requestType);
         htrpcrequest.setCompressType(compressType);
         htrpcrequest.setSerializeType(serializeType);
         htrpcrequest.setRequestId(reqauestId);
+        htrpcrequest.setTimeStamp(timeStamp);
 
         // 心跳请求没有负载，此处可判断并直接返回
         if(requestType == RequestType.HEART_BEAT.getId()){
@@ -95,12 +102,17 @@ public class htrpcRequestDecoder extends LengthFieldBasedFrameDecoder {
         byteBuf.readBytes(payLoad);
 
         //得到字节数组后就可以解压缩反序列化
-        //todo 解压缩
+        // 解压缩
+        if(payLoad != null && payLoad.length != 0) {
+            Compressor compressor = CompressorFactory.getCompressor(compressType).getCompressor();
+            payLoad = compressor.decompress(payLoad);
 
-        //反序列化
-        Serializer serializer = SerializerFactory.getSerializer(serializeType).getSerializer();
-        RequestPayLoad requestPayLoad = serializer.diserialize(payLoad, RequestPayLoad.class);
-        htrpcrequest.setRequestPayLoad(requestPayLoad);
+
+            //反序列化
+            Serializer serializer = SerializerFactory.getSerializer(serializeType).getSerializer();
+            RequestPayLoad requestPayLoad = serializer.diserialize(payLoad, RequestPayLoad.class);
+            htrpcrequest.setRequestPayLoad(requestPayLoad);
+        }
 
         if(log.isDebugEnabled()){
             log.debug("请求【{}】已经在服务端完成解码",htrpcrequest.getRequestId());
