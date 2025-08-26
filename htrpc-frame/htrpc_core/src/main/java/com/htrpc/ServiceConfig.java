@@ -1,11 +1,11 @@
 package com.htrpc;
 
 public class ServiceConfig<T> {
-    private Class<T> interfaceProvider;
+    private Class<?> interfaceProvider;
 
     private Object ref;
 
-    public Class<T> getInterface() {
+    public Class<?> getInterface() {
         return interfaceProvider;
     }
 
@@ -16,7 +16,7 @@ public class ServiceConfig<T> {
     public void setRef(Object ref) {
         this.ref = ref;
     }
-    public void setInterface(Class<T> interfaceProvider) {
+    public void setInterface(Class<?> interfaceProvider) {
         this.interfaceProvider = interfaceProvider;
     }
 }

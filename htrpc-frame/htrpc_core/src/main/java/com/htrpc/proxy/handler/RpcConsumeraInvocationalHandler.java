@@ -55,10 +55,10 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
 
         //todo 需要对各种请求id及类型做处理
         htrpcRequest htrpcrequest = htrpcRequest.builder()
-                .requestId(htrpcBootstrap.ID_GENERATOR.getId())
-                .compressType(CompressorFactory.getCompressor(htrpcBootstrap.COMPRESS_TYPE).getCode())
+                .requestId(htrpcBootstrap.getInstance().getConfiguration().getIdGenerator().getId())
+                .compressType(CompressorFactory.getCompressor(htrpcBootstrap.getInstance().getConfiguration().getCompressType()).getCode())
                 .requestType(RequestType.REQUEST.getId())
-                .serializeType(SerializerFactory.getSerializer(htrpcBootstrap.SERIALIZE_TYPE).getCode())
+                .serializeType(SerializerFactory.getSerializer(htrpcBootstrap.getInstance().getConfiguration().getSerializeType()).getCode())
                 .timeStamp(new Date().getTime())
                 .requestPayLoad(requestPayLoad)
                 .build();
@@ -66,7 +66,7 @@ public class RpcConsumeraInvocationalHandler implements InvocationHandler {
         htrpcBootstrap.REQUEST_THREAD_LOCAL.set(htrpcrequest);
 
         //获取当前配置的负载均衡器，获取一个可用节点
-        InetSocketAddress address = htrpcBootstrap.LOAD_BALANCER.selectServiceAddress(interfaceRef.getName());
+        InetSocketAddress address = htrpcBootstrap.getInstance().getConfiguration().getLoadBalancer().selectServiceAddress(interfaceRef.getName());
         if(log.isDebugEnabled()){
             log.debug("服务调用方，发现了服务【{}】的可用主机【{}】",interfaceRef.getName()
                     ,address);

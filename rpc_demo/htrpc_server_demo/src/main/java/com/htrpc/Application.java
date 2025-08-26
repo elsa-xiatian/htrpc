@@ -20,7 +20,9 @@ public class Application {
                 //协议
                 .protocal(new ProtocalConfig("jdk"))
                 //发布服务
-                .publish(service)
+                //.publish(service)
+                //扫包批量发布
+                .scan("com.htrpc")
                 //启动服务
                 .start();
     }

@@ -68,7 +68,5 @@ public class IdGenerator {
         return current;
     }
 
-    public static void main(String[] args) {
 
-    }
 }

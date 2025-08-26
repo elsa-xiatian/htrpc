@@ -1,14 +1,13 @@
 package com.htrpc;
 
+import com.htrpc.annotation.htrpcApi;
 import com.htrpc.channelHandler.handler.MethodCallHandler;
 import com.htrpc.channelHandler.handler.htrpcRequestDecoder;
 import com.htrpc.channelHandler.handler.htrpcResponseEncoder;
+import com.htrpc.config.Configuration;
 import com.htrpc.core.HeartbeatDetector;
-import com.htrpc.discovery.Registry;
 import com.htrpc.discovery.RegistryConfig;
 import com.htrpc.loadbalancer.LoadBalancer;
-import com.htrpc.loadbalancer.impl.ConsisentHashBalancer;
-import com.htrpc.loadbalancer.impl.RoundRobinLoadBalancer;
 import com.htrpc.transport.message.htrpcRequest;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -18,52 +17,40 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LoggingHandler;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class htrpcBootstrap {
 
 
-    public static final int PORT = 8090;
     //htrpcBootstrap是一个单例：即只有一个实例
     private static final htrpcBootstrap htrpcstrap = new htrpcBootstrap();
 
-    //定义相关基础配置
-    private String appName = "default"; //应用名称
-
-    private RegistryConfig registryConfig;
-    private ProtocalConfig protocalConfig;
-
-
-    public static final IdGenerator ID_GENERATOR = new IdGenerator(1,2);
-    public static String SERIALIZE_TYPE = "jdk";
-    public static String COMPRESS_TYPE = "gzip";
-    //TODO 待处理
+    private Configuration configuration;
 
     public static final ThreadLocal<htrpcRequest> REQUEST_THREAD_LOCAL = new ThreadLocal<>();
-    private Registry registry;
-    public static LoadBalancer LOAD_BALANCER;
     //连接的缓存
     public final static Map<InetSocketAddress, Channel> CHANNEL_CACHE = new ConcurrentHashMap<>(16);
     public final static TreeMap<Long,Channel> ANSWER_TIME_CHANNEL_CACHE = new TreeMap<>();
-
     //维护已经发布并暴露的服务列表，key是接口的全限定名，value是服务的配置
     public final static Map<String,ServiceConfig<?>> SERVERS_LIST = new ConcurrentHashMap<>(16);
-
     //定义全局的对外挂起的completableFuture
     public final static Map<Long, CompletableFuture<Object>> PENDING_REQUEST = new ConcurrentHashMap<>(128);
-
-    //维护一个zookeeper实例
-    // private ZooKeeper zooKeeper;
 
 
     private htrpcBootstrap(){
         //构造启动引导程序，在此做初始化
+        configuration = new Configuration();
     }
     public static htrpcBootstrap getInstance() {
         return htrpcstrap;
@@ -75,7 +62,7 @@ public class htrpcBootstrap {
      * @return this
      */
     public htrpcBootstrap application(String appName) {
-        this.appName = appName;
+        configuration.setAppName(appName);
         return this;
     }
 
@@ -85,8 +72,14 @@ public class htrpcBootstrap {
      */
     public htrpcBootstrap registry(RegistryConfig registryConfig) {
         //尝试使用 registryConfig获取一个注册中心
-        this.registry = registryConfig.getRegistry();
-        htrpcBootstrap.LOAD_BALANCER = new ConsisentHashBalancer();
+        configuration.setRegistryConfig(registryConfig);
+
+        return this;
+    }
+
+    public htrpcBootstrap loadBalancer(LoadBalancer loadBalancer) {
+        //尝试使用 registryConfig获取一个注册中心
+       configuration.setLoadBalancer(loadBalancer);
         return this;
     }
 
@@ -96,7 +89,7 @@ public class htrpcBootstrap {
      * @return
      */
     public htrpcBootstrap protocal(ProtocalConfig protocalConfig) {
-        this.protocalConfig = protocalConfig;
+        configuration.setProtocalConfig(protocalConfig);
         if(log.isDebugEnabled()){
             log.debug("当前工程使用了: {}协议进行序列化",protocalConfig.toString());
         }
@@ -110,7 +103,7 @@ public class htrpcBootstrap {
      */
     public htrpcBootstrap publish(ServiceConfig<?> service) {
         //抽象了注册中心的概念，使用注册中心的一个实现完成注册
-        registry.register(service);
+       configuration.getRegistryConfig().getRegistry().register(service);
         SERVERS_LIST.put(service.getInterface().getName(),service);
         return this;
     }
@@ -155,7 +148,7 @@ public class htrpcBootstrap {
 
             //4.绑定端口
 
-            ChannelFuture channelFuture = serverBootstrap.bind(PORT).sync();
+            ChannelFuture channelFuture = serverBootstrap.bind(configuration.getPort()).sync();
 
             channelFuture.channel().closeFuture().sync();
         }catch (InterruptedException e){
@@ -180,7 +173,7 @@ public class htrpcBootstrap {
 
         HeartbeatDetector.detectHeartbeat(reference.getInterface().getName());
         //配置reference，方便生成代理对象
-        reference.setRegistry(registry);
+        reference.setRegistry(configuration.getRegistryConfig().getRegistry());
         return this;
      }
 
@@ -189,21 +182,111 @@ public class htrpcBootstrap {
      * @param serializeType
      */
     public htrpcBootstrap serialize(String serializeType) {
-        SERIALIZE_TYPE = serializeType;
+        configuration.setSerializeType(serializeType);
         if(log.isDebugEnabled()){}
         log.debug("配置了使用的序列化的方式为：[{}]",serializeType);
         return this;
     }
 
     public htrpcBootstrap compress(String compressType){
-        COMPRESS_TYPE = compressType;
+        configuration.setCompressType(compressType);
         if(log.isDebugEnabled()){
             log.debug("配置了使用【{}】的压缩方式",compressType);
         }
         return this;
     }
 
-    public Registry getRegistry() {
-        return registry;
+    public htrpcBootstrap scan(String packageName) {
+        //通过packageName获得其下所有类的全限定名称
+        List<String> classNames =  getAllClassName(packageName);
+        //通过反射获取其接口，构建具体实现
+        List<Class<?>> classes = classNames.stream()
+                .map(className -> {
+                    try {
+                        return Class.forName(className);
+                    } catch (ClassNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).filter(clazz -> clazz.getAnnotation(htrpcApi.class) != null)
+                .collect(Collectors.toList());
+        for (Class<?> clazz : classes) {
+            // 获取接口
+            Class<?>[] interfaces = clazz.getInterfaces();
+            Object instance = null;
+            try {
+                instance = clazz.getConstructor().newInstance();
+            } catch (InstantiationException | IllegalAccessException
+                     | InvocationTargetException | NoSuchMethodException e) {
+                throw new RuntimeException(e);
+            }
+
+            List<ServiceConfig<?>> serviceConfigs = new ArrayList<>();
+            for (Class<?> anInterface : interfaces) {
+                ServiceConfig<?> serviceConfig = new ServiceConfig<>();
+                serviceConfig.setInterface(anInterface);
+                serviceConfig.setRef(instance);
+                if(log.isDebugEnabled()){
+                    log.debug("-------->已经通过包扫描，将服务【{}】发布",anInterface);
+                }
+
+                //发布
+                publish(serviceConfig);
+            }
+
+        }
+
+        return this;
+    }
+
+    private List<String> getAllClassName(String packageName) {
+        //通过packageName获得绝对路径
+        String basePath = packageName.replaceAll("\\.","/");
+        URL url = ClassLoader.getSystemClassLoader().getResource(basePath);
+        if(url == null){
+         throw new RuntimeException("包扫描时，发现路径不存在");
+        }
+        String absolutePath = url.getPath();
+        List<String> classNames = new ArrayList<>();
+        classNames = recursionFile(absolutePath,classNames,basePath);
+        return classNames;
+    }
+
+    private List<String> recursionFile(String absolutePath, List<String> classNames,String basepath) {
+     //获取文件
+        File file = new File(absolutePath);
+        //判断文件是否是文件夹
+        if(file.isDirectory()){
+            //找到文件夹的所有文件
+            File[] children = file.listFiles(pathname -> pathname.isDirectory() || pathname.getPath().contains(".class"));
+            if(children == null || children.length == 0){
+                return classNames;
+            }
+            for (File child : children) {
+                if(child.isDirectory()){
+                    recursionFile(child.getAbsolutePath(),classNames,basepath);
+                } else{
+                    String className =  getClassNameByAbsolutePath(child.getAbsolutePath(),basepath);
+                   classNames.add(className);
+                }
+            }
+        }else{
+            String className =  getClassNameByAbsolutePath(absolutePath,basepath);
+            classNames.add(className);
+        }
+
+        return classNames;
+    }
+
+    private String getClassNameByAbsolutePath(String absolutePath,String basepath) {
+        String fileName = absolutePath
+                .substring(absolutePath.indexOf(basepath.replaceAll("/","\\\\")))
+                .replaceAll("\\\\",".");
+
+        fileName = fileName.substring(0,fileName.indexOf(".class"));
+        return fileName;
+    }
+
+    public Configuration getConfiguration() {
+        return configuration;
     }
 }

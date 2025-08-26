@@ -105,12 +105,12 @@ public class htrpcResponseDecoder extends LengthFieldBasedFrameDecoder {
             //得到字节数组后就可以解压缩反序列化
             //解压缩
 
-            Compressor compressor = CompressorFactory.getCompressor(compressType).getCompressor();
+            Compressor compressor = CompressorFactory.getCompressor(compressType).getImpl();
 
             payLoad = compressor.decompress(payLoad);
 
             //反序列化
-            Serializer serializer = SerializerFactory.getSerializer(htrpcResponse.getSerializeType()).getSerializer();
+            Serializer serializer = SerializerFactory.getSerializer(htrpcResponse.getSerializeType()).getImpl();
             Object body = serializer.diserialize(payLoad, Object.class);
             htrpcResponse.setBody(body);
         }

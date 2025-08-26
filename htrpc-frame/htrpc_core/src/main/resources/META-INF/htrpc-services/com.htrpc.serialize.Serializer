@@ -1,0 +1,2 @@
+1-jdk-com.htrpc.serialize.impl.JdkSerializer
+2-json-com.htrpc.serialize.impl.JsonSerializer

@@ -45,11 +45,11 @@ public class htrpcRequestEncoder extends MessageToByteEncoder<htrpcRequest> {
         //写入请求体
         byte[] body = null;
         if(msg.getRequestPayLoad() != null) {
-            Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getSerializer();
+            Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getImpl();
             body = serializer.serialize(msg.getRequestPayLoad());
 
 
-            Compressor compressor = CompressorFactory.getCompressor(msg.getCompressType()).getCompressor();
+            Compressor compressor = CompressorFactory.getCompressor(msg.getCompressType()).getImpl();
             body = compressor.compress(body);
         }
 

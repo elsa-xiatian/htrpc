@@ -103,9 +103,6 @@ public class ConsisentHashBalancer extends AbstractLoadBalancer {
             }
         }
 
-        @Override
-        public void reBalance() {
 
-        }
     }
 }

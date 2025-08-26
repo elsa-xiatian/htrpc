@@ -50,10 +50,10 @@ public class htrpcResponseEncoder extends MessageToByteEncoder<htrpcResponse> {
         //写入请求体
         byte[] body = null;
         if(msg.getBody() != null) {
-            Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getSerializer();
+            Serializer serializer = SerializerFactory.getSerializer(msg.getSerializeType()).getImpl();
             body = serializer.serialize(msg.getBody());
 
-            Compressor compressor = CompressorFactory.getCompressor(msg.getCompressType()).getCompressor();
+            Compressor compressor = CompressorFactory.getCompressor(msg.getCompressType()).getImpl();
 
             body = compressor.compress(body);
         }
